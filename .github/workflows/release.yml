@@ -28,6 +28,9 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install realtek:AmebaD
 
+      - name: List available boards
+        run: arduino-cli board listall | grep -i realtek
+
       - name: Build firmware
         run: |
           arduino-cli compile \
