@@ -1,8 +1,7 @@
 # Zero-BW16 Flash Script
 # Usage: Right-click -> Run with PowerShell  OR  .\flash.ps1
 
-$FQBN = "realtek:AmebaZ2:bw16"
-$BOARD_URL = "https://github.com/ambiot/ambz2_arduino/raw/master/Arduino_package/package_realtek.com_ambz2_index.json"
+$BOARD_URL = "https://github.com/ambiot/ambd_arduino/raw/master/Arduino_package/package_realtek.com_amebad_index.json"
 $SKETCH = $PSScriptRoot
 
 Write-Host ""
@@ -29,18 +28,28 @@ if (-not $acli) {
 }
 
 # Install board package if not present
-Write-Host "[*] Checking Realtek AmebaZ2 board package..." -ForegroundColor Yellow
-$boards = arduino-cli board listall 2>$null | Select-String "AmebaZ2"
+Write-Host "[*] Checking Realtek AmebaD board package..." -ForegroundColor Yellow
+$boards = arduino-cli board listall 2>$null | Select-String "AmebaD"
 if (-not $boards) {
-    Write-Host "[*] Installing Realtek AmebaZ2 board package (RTL8720DN)..." -ForegroundColor Yellow
+    Write-Host "[*] Installing Realtek AmebaD board package (includes BW16/RTL8720DN)..." -ForegroundColor Yellow
     arduino-cli config init --overwrite | Out-Null
     arduino-cli config add board_manager.additional_urls $BOARD_URL | Out-Null
     arduino-cli core update-index | Out-Null
-    arduino-cli core install realtek:AmebaZ2
+    arduino-cli core install realtek:AmebaD
     Write-Host "[+] Board package installed." -ForegroundColor Green
 } else {
     Write-Host "[+] Board package already installed." -ForegroundColor Green
 }
+
+# Auto-detect BW16 FQBN
+$FQBN = (arduino-cli board listall 2>$null | Select-String -Pattern "bw16" -CaseSensitive:$false | Select-Object -First 1).ToString().Split()[-1]
+if (-not $FQBN) {
+    Write-Host "[!] Could not detect BW16 board FQBN. Package may not include BW16." -ForegroundColor Red
+    arduino-cli board listall | Select-String "realtek"
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+Write-Host "[+] Detected FQBN: $FQBN" -ForegroundColor Green
 
 # Detect connected COM ports
 Write-Host ""
