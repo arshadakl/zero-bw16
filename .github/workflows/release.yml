@@ -17,30 +17,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ hashFiles('platformio.ini') }}
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install PlatformIO
-        run: pip install platformio
-
-      - name: Install Realtek AmebaD platform
-        run: pio pkg install --platform "https://github.com/ambiot/ambd_arduino.git"
+      - name: Add Realtek AmebaD board package
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://github.com/ambiot/ambd_arduino/raw/master/Arduino_package/package_realtek.com_amebad_index.json
+          arduino-cli core update-index
+          arduino-cli core install realtek:AmebaD
 
       - name: Build firmware
-        run: pio run -e bw16
+        run: |
+          arduino-cli compile \
+            --fqbn realtek:AmebaD:bw16 \
+            --build-path build \
+            --warnings none \
+            .
+
+      - name: List build output
+        run: ls -la build/
+
+      - name: Find firmware binary
+        id: find_bin
+        run: |
+          BIN=$(find build -name "*.bin" | head -1)
+          echo "bin_path=$BIN" >> $GITHUB_OUTPUT
 
       - name: Rename binary
-        run: cp .pio/build/bw16/firmware.bin zero-bw16-${{ github.ref_name }}.bin
+        run: cp "${{ steps.find_bin.outputs.bin_path }}" zero-bw16-${{ github.ref_name }}.bin
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           name: Zero-BW16 ${{ github.ref_name }}
