@@ -16,6 +16,7 @@ public:
     void log(LogLevel level, const char* fmt, ...);
     void clear();
     const LogEntry* entries() const;
+    const LogEntry* lastEntry() const; // most recently written entry
     int count() const;
     uint32_t changeCounter() const;
 private:

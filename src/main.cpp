@@ -99,16 +99,15 @@ void loop() {
     static uint32_t lastLogChange = 0;
     if (Log.changeCounter() != lastLogChange) {
         lastLogChange = Log.changeCounter();
-        // Push last log entry via SSE
-        int cnt = Log.count();
-        if (cnt > 0) {
-            const LogEntry* e = Log.entries();
-            int idx = (cnt < MAX_LOG_ENTRIES) ? cnt - 1 : MAX_LOG_ENTRIES - 1;
+        // Push last log entry via SSE using circular-buffer-aware lastEntry()
+        const LogEntry* last = Log.lastEntry();
+        if (last) {
+            const LogEntry* e = last;
             static const char* lvlNames[] = {"info","warn","error","attack","sniff"};
             char json[160];
             snprintf(json, sizeof(json),
                 "{\"type\":\"log\",\"ts\":%lu,\"level\":\"%s\",\"msg\":\"%s\"}",
-                e[idx].ts, lvlNames[min((int)e[idx].level, 4)], e[idx].msg);
+                e->ts, lvlNames[min((int)e->level, 4)], e->msg);
             WebSrv.pushSSE(json);
         }
     }

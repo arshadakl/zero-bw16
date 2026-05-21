@@ -30,5 +30,9 @@ void Logger::clear() {
 }
 
 const LogEntry* Logger::entries() const { return _buf; }
+const LogEntry* Logger::lastEntry() const {
+    if (_count == 0) return nullptr;
+    return &_buf[(_head - 1 + MAX_LOG_ENTRIES) % MAX_LOG_ENTRIES];
+}
 int Logger::count() const { return _count; }
 uint32_t Logger::changeCounter() const { return _changes; }
