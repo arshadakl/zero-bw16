@@ -247,6 +247,44 @@ All endpoints accept and return JSON. Base URL: `http://192.168.1.1`
 
 ---
 
+## Contributing
+
+Contributions are welcome. This project is open-source under GPL-3.0 — improvements, bug fixes, and new features can be submitted via pull request.
+
+### Guidelines
+
+- **Scope:** BW16 (RTL8720DN) only — no external hardware dependencies
+- **Code style:** Match existing style; no unnecessary abstractions
+- **Commits:** Use conventional commits — `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`
+- **Testing:** Verify on real hardware before submitting; mention what was tested in the PR description
+- **New attacks / features:** Open an issue first to discuss before implementing
+- **No breaking changes** to the web API without versioning the endpoint
+
+### How to Contribute
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feat/your-feature`
+3. Make changes and commit with conventional commit messages
+4. Push to your fork: `git push origin feat/your-feature`
+5. Open a Pull Request against `main` with a clear description of what and why
+
+### What's Welcome
+
+- Bug fixes and stability improvements
+- New 802.11 attack or passive capture techniques (BW16 hardware only)
+- Web UI improvements
+- Documentation improvements
+- Performance optimizations
+
+### What Will Be Rejected
+
+- External hardware dependencies (displays, GPS, Bluetooth modules, etc.)
+- Features requiring OS or Linux userspace
+- Code that introduces third-party libraries without strong justification
+- Pull requests without hardware testing confirmation
+
+---
+
 ## Author
 
 **Arshad AK**
@@ -255,7 +293,6 @@ All endpoints accept and return JSON. Base URL: `http://192.168.1.1`
 |---|---|
 | Portfolio | [arshadakl.in](https://www.arshadakl.in) |
 | SSH Portfolio | `ssh arshadakl.in` *(open your terminal and try it)* |
-| GitHub | [@arshadakl](https://github.com/arshadakl) |
 
 ---
 
