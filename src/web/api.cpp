@@ -398,7 +398,7 @@ void ApiHandler::_postSettings(WiFiClient& c, const char* body, int len) {
     char tmp[64];
     v = _jsonInt(body, "frames", -1);  if (v > 0) s.deauth_frames = v;
     v = _jsonInt(body, "delay", -1);   if (v >= 0) s.send_delay_ms = v;
-    v = _jsonInt(body, "ap_ch", -1);   if (v > 0 && v <= 13) s.ap_channel = v;
+    v = _jsonInt(body, "ap_ch", -1);   if (v > 0 && v <= 165) s.ap_channel = v;
     v = _jsonInt(body, "auto_scan", -1); if (v >= 0) s.auto_scan = v;
     v = _jsonInt(body, "auto_atk", -1);  if (v >= 0) s.auto_attack = v;
     v = _jsonInt(body, "led", -1);       if (v >= 0) { s.led_enabled = v; Led.setEnabled(v); }

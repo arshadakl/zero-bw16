@@ -187,7 +187,7 @@ progress{width:100%;height:8px;border-radius:4px;}
     <div class="card-title">Beacon Spam Config</div>
     <div class="form-row">
       <label>Channel</label>
-      <input type="number" id="bc-ch" value="6" min="1" max="13" style="width:80px">
+      <input type="number" id="bc-ch" value="6" min="1" max="165" style="width:80px">
     </div>
     <div class="form-row">
       <label>Interval (ms)</label>
@@ -228,7 +228,7 @@ progress{width:100%;height:8px;border-radius:4px;}
     <div class="card-title">Access Point</div>
     <div class="form-row"><label>SSID</label><input type="text" id="s-ssid" value="zero-bw16" maxlength="31" style="width:200px"></div>
     <div class="form-row"><label>Password</label><input type="password" id="s-pass" value="zerobw16!" maxlength="63" style="width:200px"></div>
-    <div class="form-row"><label>Channel</label><input type="number" id="s-ch" value="6" min="1" max="13" style="width:80px"></div>
+    <div class="form-row"><label>Channel</label><input type="number" id="s-ch" value="6" min="1" max="165" style="width:80px"></div>
   </div>
   <div class="card">
     <div class="card-title">Behaviour</div>

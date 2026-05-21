@@ -37,7 +37,7 @@ bool Scanner::scan() {
         net.rssi = WiFi.RSSI(i);
         net.channel = WiFi.channel(i);
         net.encryption = WiFi.encryptionType(i);
-        net.freq = 0; // BW16 scan API may not expose freq band directly
+        net.freq = IS_5GHZ_CH(net.channel) ? 1 : 0;
         net.hidden = (ssid.length() == 0);
         net.wps = false;
         net.pmf = false;

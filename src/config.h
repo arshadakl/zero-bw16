@@ -40,3 +40,18 @@
 // --- Channels ---
 #define CHANNEL_MIN_24   1
 #define CHANNEL_MAX_24   13
+
+// 5GHz UNII band channels (RTL8720DN supports UNII-1/2/3)
+#define CHANNEL_MIN_5    36
+#define CHANNEL_MAX_5    165
+// Helper: channel > 14 means 5GHz
+#define IS_5GHZ_CH(ch)   ((ch) >= 36)
+
+// Common 5GHz channels (UNII-1: 36-48, UNII-2A: 52-64, UNII-3: 149-165)
+static const uint8_t CHANNELS_5GHZ[] = {
+    36,  40,  44,  48,          // UNII-1
+    52,  56,  60,  64,          // UNII-2A
+    100, 104, 108, 112, 116,    // UNII-2C lower
+    132, 136, 140, 144,         // UNII-2C upper
+    149, 153, 157, 161, 165     // UNII-3
+};
