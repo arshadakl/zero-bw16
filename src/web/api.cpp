@@ -67,6 +67,26 @@ void ApiHandler::_respondErr(WiFiClient& c, const char* msg) {
     _respond(c, 400, "application/json", buf);
 }
 
+// Escape JSON string: replace " \ \n \r with safe sequences
+static void _jsonEsc(const char* src, char* dst, int maxlen) {
+    int j = 0;
+    for (int i = 0; src[i] && j < maxlen - 2; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if (c == '"' || c == '\\') {
+            if (j < maxlen - 3) dst[j++] = '\\';
+        } else if (c == '\n') {
+            if (j < maxlen - 3) { dst[j++] = '\\'; dst[j++] = 'n'; }
+            continue;
+        } else if (c == '\r') {
+            continue;
+        } else if (c < 0x20) {
+            continue; // drop other control chars
+        }
+        dst[j++] = (char)c;
+    }
+    dst[j] = 0;
+}
+
 void ApiHandler::_bssidStr(const uint8_t* b, char* out) {
     snprintf(out, 18, "%02X:%02X:%02X:%02X:%02X:%02X", b[0],b[1],b[2],b[3],b[4],b[5]);
 }
@@ -123,12 +143,13 @@ void ApiHandler::_getNetworks(WiFiClient& c) {
         if (!n) continue;
         _bssidStr(n->bssid, bssid);
         if (i > 0) json += ',';
+        char ssid_e[70]; _jsonEsc(n->ssid, ssid_e, sizeof(ssid_e));
         char buf[200];
         snprintf(buf, sizeof(buf),
             "{\"i\":%d,\"ssid\":\"%s\",\"bssid\":\"%s\","
             "\"rssi\":%d,\"ch\":%d,\"enc\":%d,"
             "\"freq\":%d,\"wps\":%s,\"pmf\":%s,\"hidden\":%s,\"clients\":%d}",
-            i, n->ssid, bssid,
+            i, ssid_e, bssid,
             n->rssi, n->channel, n->encryption,
             n->freq, n->wps?"true":"false", n->pmf?"true":"false",
             n->hidden?"true":"false", n->client_count);
@@ -216,10 +237,11 @@ void ApiHandler::_getSniffProbes(WiFiClient& c) {
         if (i > 0) json += ',';
         _bssidStr(p->mac, mac);
         char buf[160];
+        char ssid_e[70]; _jsonEsc(p->ssid, ssid_e, sizeof(ssid_e));
         snprintf(buf, sizeof(buf),
             "{\"mac\":\"%s\",\"ssid\":\"%s\",\"rssi\":%d,"
             "\"age_first\":%lu,\"count\":%d}",
-            mac, p->ssid, p->rssi,
+            mac, ssid_e, p->rssi,
             millis() - p->first_seen, p->count);
         json += buf;
     }
@@ -266,10 +288,11 @@ void ApiHandler::_getSniffPMKIDs(WiFiClient& c) {
         _bssidStr(p->client, client);
         _hexStr(p->pmkid, 16, pmkid_hex);
         char buf[200];
+        char ssid_e[70]; _jsonEsc(p->ssid, ssid_e, sizeof(ssid_e));
         snprintf(buf, sizeof(buf),
             "{\"bssid\":\"%s\",\"ssid\":\"%s\",\"client\":\"%s\","
             "\"pmkid\":\"%s\",\"age\":%lu}",
-            bssid, p->ssid, client, pmkid_hex, millis() - p->ts);
+            bssid, ssid_e, client, pmkid_hex, millis() - p->ts);
         json += buf;
     }
     json += "]}";
@@ -345,9 +368,10 @@ void ApiHandler::_getLog(WiFiClient& c) {
         const LogEntry& e = entries[i];
         if (e.ts == 0 && e.msg[0] == 0) continue;
         if (!first) json += ','; first = false;
-        char buf[120];
+        char msg_e[100]; _jsonEsc(e.msg, msg_e, sizeof(msg_e));
+        char buf[140];
         snprintf(buf, sizeof(buf), "{\"ts\":%lu,\"level\":\"%s\",\"msg\":\"%s\"}",
-                 e.ts, lvlNames[min((int)e.level, 4)], e.msg);
+                 e.ts, lvlNames[min((int)e.level, 4)], msg_e);
         json += buf;
     }
     json += "]}";
@@ -379,8 +403,11 @@ void ApiHandler::_postSettings(WiFiClient& c, const char* body, int len) {
     v = _jsonInt(body, "auto_atk", -1);  if (v >= 0) s.auto_attack = v;
     v = _jsonInt(body, "led", -1);       if (v >= 0) { s.led_enabled = v; Led.setEnabled(v); }
     if (_jsonStr(body, "ap_ssid", tmp, sizeof(tmp))) strlcpy(s.ap_ssid, tmp, sizeof(s.ap_ssid));
-    if (_jsonStr(body, "ap_pass", tmp, sizeof(tmp)) && strlen(tmp) >= 8)
-        strlcpy(s.ap_pass, tmp, sizeof(s.ap_pass));
+    if (_jsonStr(body, "ap_pass", tmp, sizeof(tmp))) {
+        if (strlen(tmp) >= 8)
+            strlcpy(s.ap_pass, tmp, sizeof(s.ap_pass));
+        else { _respondErr(c, "password min 8 chars"); return; }
+    }
     Nvs.save();
     _respondOk(c);
 }
