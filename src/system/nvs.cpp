@@ -28,7 +28,7 @@ void NVS::init() {
 
 void NVS::load() {
     EEPROM.get(0, _cfg);
-    if (memcmp(_cfg.magic, NVS_MAGIC, 3) != 0 || _cfg.version != 1) {
+    if (memcmp(_cfg.magic, NVS_MAGIC, 4) != 0 || _cfg.version != 1) {
         Log.log(LOG_WARN, "NVS invalid, loading defaults");
         _defaults();
         save();
