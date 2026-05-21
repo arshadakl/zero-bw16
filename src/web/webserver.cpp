@@ -50,9 +50,9 @@ void WebServer::_tickDns() {
     resp[10] = 0; resp[11] = 0;          // ARCOUNT
     int off = 12;
     // Copy question section
-    while (off < len && buf[off] != 0) off += buf[off] + 1;
+    while (off < len && off < 64 && buf[off] != 0) off += buf[off] + 1;
     off += 5; // null byte + QTYPE(2) + QCLASS(2)
-    if (off > len) return;
+    if (off > len || off > 80) return; // guard against malformed / oversized query
     memcpy(resp + 12, buf + 12, off - 12);
     int roff = off;
     // Answer: pointer to name in question
