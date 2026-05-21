@@ -388,6 +388,7 @@ void ApiHandler::_postSettings(WiFiClient& c, const char* body, int len) {
 void ApiHandler::_postSettingsReset(WiFiClient& c) { Nvs.reset(); _respondOk(c); }
 
 void ApiHandler::_postOta(WiFiClient& c, int content_len) {
-    _respond(c, 200, "text/plain", "Flashing...");
-    Ota.handleUpload(c, content_len);
+    bool ok = Ota.handleUpload(c, content_len);
+    if (ok) _respond(c, 200, "text/plain", "OK - rebooting");
+    else _respondErr(c, "OTA failed");
 }
