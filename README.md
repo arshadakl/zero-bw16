@@ -128,7 +128,7 @@ src/
 
 - [PlatformIO](https://platformio.org/) IDE or CLI
 - `realtek-ambz2` platform installed
-- USB Type-C cable
+- USB Type-C cable (for initial flash only)
 
 ### Build
 
@@ -136,13 +136,53 @@ src/
 pio run
 ```
 
-### Flash
+Output binary: `.pio/build/bw16/firmware.bin`
+
+### Entering Download Mode
+
+Required before any UART flash:
+
+1. Hold the **BOOT** button
+2. Press and release **RESET**
+3. Release **BOOT**
+4. The module is now in download mode — proceed with flashing
+
+---
+
+### Flash Method 1 — PlatformIO (Recommended)
+
+Cross-platform, no extra tools needed.
 
 ```bash
 pio run -t upload
 ```
 
-Alternatively, use the GUI flasher tool from the Ereshkigal project with the compiled `.bin`.
+PlatformIO auto-detects the COM port and flashes at 1.5 Mbps.
+
+---
+
+### Flash Method 2 — Realtek AmebaD ImageTool (Official)
+
+Official Realtek GUI flasher for Windows. Distributed with the [AmebaD SDK](https://github.com/ambiot/ambd_sdk) under `tools/`.
+
+Steps:
+1. Open `AmebaD_ImageTool.exe`
+2. Select COM port
+3. Load `.pio/build/bw16/firmware.bin`
+4. Click **Download**
+
+---
+
+### Flash Method 3 — OTA (Subsequent Updates)
+
+After the initial UART flash, all future firmware updates can be done wirelessly — no USB cable required.
+
+1. Connect to the `zero-bw16` access point
+2. Navigate to `http://192.168.1.1` → **Settings** tab → **OTA Update**
+3. Select the new `.bin` file and upload
+4. Device reboots automatically into the new firmware
+
+---
 
 ### Serial Monitor
 
