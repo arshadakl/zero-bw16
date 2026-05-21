@@ -68,5 +68,4 @@ public:
 
 private:
     static int _addIE(uint8_t* buf, uint8_t id, const uint8_t* data, uint8_t len);
-    static uint16_t _seqNum;
 };

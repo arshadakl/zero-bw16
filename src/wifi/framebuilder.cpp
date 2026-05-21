@@ -2,8 +2,7 @@
 
 static const uint8_t BCAST[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 static const uint8_t RATES[]  = {0x82,0x84,0x8B,0x96,0x0C,0x12,0x18,0x24,0x30,0x48,0x60,0x6C};
-
-uint16_t FrameBuilder::_seqNum = 0;
+static uint16_t _seqNum = 0;
 
 void FrameBuilder::randomMAC(uint8_t* mac) {
     for (int i = 0; i < 6; i++) mac[i] = (uint8_t)random(0, 256);
@@ -24,7 +23,7 @@ static void _fillHeader(Dot11Header* hdr, uint8_t fc0, const uint8_t* da,
     memcpy(hdr->da, da, 6);
     memcpy(hdr->sa, sa, 6);
     memcpy(hdr->bssid, bssid, 6);
-    hdr->seq = (FrameBuilder::_seqNum++ & 0xFFF) << 4;
+    hdr->seq = (_seqNum++ & 0xFFF) << 4;
 }
 
 // --- Deauth ---
