@@ -181,10 +181,11 @@ void Sniffer::_handleEAPOL(const uint8_t* frame, int len) {
     if (ack && !mic) msg_num = 1;       // msg 1/3
     else if (!ack && mic) msg_num = 2;  // msg 2/4
 
-    const uint8_t* anonce = eapol + 13;  // ANonce at byte 13 of EAPOL-Key
-    const uint8_t* snonce = eapol + 45;  // SNonce
+    // EAPOL-Key body starts at eapol[4]; nonce field at body+13 = eapol[17]
+    // SNonce (msg2) occupies the same nonce field position as ANonce (msg1)
+    const uint8_t* nonce = eapol + 17;
 
-    // Key Data at offset 81 (variable), key_data_len at offset 81
+    // Key Data length at eapol[97..98], key data at eapol[99]
     uint16_t kd_len = (eapol[97] << 8) | eapol[98];
     const uint8_t* kd = eapol + 99;
 
@@ -200,10 +201,10 @@ void Sniffer::_handleEAPOL(const uint8_t* frame, int len) {
         if (memcmp(h.bssid, bssid, 6) == 0 &&
             memcmp(h.client, sa, 6) == 0) {
             h.frames_mask |= (1 << (msg_num - 1));
-            if (msg_num == 1) memcpy(h.anonce, anonce, 32);
+            if (msg_num == 1) memcpy(h.anonce, nonce, 32);
             if (msg_num == 2) {
-                memcpy(h.snonce, snonce, 32);
-                if (eapol_len >= 13) memcpy(h.mic, eapol + 77, 16);
+                memcpy(h.snonce, nonce, 32);
+                if (eapol_len >= 93) memcpy(h.mic, eapol + 81, 16);
             }
             h.ts = millis();
             found = true;
@@ -217,10 +218,10 @@ void Sniffer::_handleEAPOL(const uint8_t* frame, int len) {
         memcpy(h.client, sa, 6);
         h.frames_mask = (1 << (msg_num - 1));
         memset(h.anonce, 0, 32); memset(h.snonce, 0, 32); memset(h.mic, 0, 16);
-        if (msg_num == 1) memcpy(h.anonce, anonce, 32);
+        if (msg_num == 1) memcpy(h.anonce, nonce, 32);
         if (msg_num == 2) {
-            memcpy(h.snonce, snonce, 32);
-            if (eapol_len >= 93) memcpy(h.mic, eapol + 77, 16);
+            memcpy(h.snonce, nonce, 32);
+            if (eapol_len >= 93) memcpy(h.mic, eapol + 81, 16);
         }
         h.ts = millis();
         _changes++;
@@ -231,36 +232,52 @@ void Sniffer::_handleEAPOL(const uint8_t* frame, int len) {
 
 void Sniffer::_extractPMKID(const uint8_t* bssid, const uint8_t* client,
                               const uint8_t* kd, int kd_len) {
-    // Walk IEs in key data looking for RSNE (ID=0x30)
     int off = 0;
     while (off + 2 <= kd_len) {
         uint8_t id  = kd[off];
         uint8_t eln = kd[off + 1];
-        if (off + 2 + eln > kd_len) break;
-        if (id == 0x30 && eln >= 20) {
-            // RSNE: check PMKID Count at byte 18 of RSNE body
+        if (off + 2 + (int)eln > kd_len) break;
+        if (id == 0x30) {
+            // Parse RSNE dynamically to locate PMKID at correct offset
+            // RSNE body: Version(2) + GroupCipher(4) + PwCount(2) + PwSuites(4n)
+            //          + AKMCount(2) + AKMSuites(4n) + Capabilities(2)
+            //          + PMKIDCount(2) + PMKIDList(16n)
             const uint8_t* rsne = kd + off + 2;
-            uint16_t pmkid_cnt = rsne[18] | (rsne[19] << 8);
-            if (pmkid_cnt > 0 && eln >= 36) {
-                const uint8_t* pmkid_ptr = rsne + 20;
-                for (int i = 0; i < _pmkidCount; i++) {
-                    if (memcmp(_pmkids[i].bssid, bssid, 6) == 0 &&
-                        memcmp(_pmkids[i].client, client, 6) == 0) return;
-                }
-                if (_pmkidCount >= MAX_PMKID_ENTRIES) return;
-                PMKIDEntry& p = _pmkids[_pmkidCount++];
-                memcpy(p.bssid, bssid, 6);
-                memcpy(p.client, client, 6);
-                memcpy(p.pmkid, pmkid_ptr, 16);
-                p.ts = millis();
-                const Network* net = Scan.networkByBSSID(bssid);
-                strlcpy(p.ssid, net ? net->ssid : "?", sizeof(p.ssid));
-                _changes++;
-                Log.log(LOG_SNIFF, "PMKID captured %02X:%02X:%02X...",
-                        bssid[0], bssid[1], bssid[2]);
-                return;
+            int roff = 2; // skip Version
+            if (roff + 4 > eln) goto next_ie;
+            roff += 4; // Group Cipher Suite
+            if (roff + 2 > eln) goto next_ie;
+            { uint16_t pw = rsne[roff] | (uint16_t)(rsne[roff+1] << 8);
+              roff += 2 + 4 * pw; } // Pairwise count + suites
+            if (roff + 2 > eln) goto next_ie;
+            { uint16_t akm = rsne[roff] | (uint16_t)(rsne[roff+1] << 8);
+              roff += 2 + 4 * akm; } // AKM count + suites
+            roff += 2; // RSN Capabilities
+            if (roff + 2 > eln) goto next_ie;
+            { uint16_t pmkid_cnt = rsne[roff] | (uint16_t)(rsne[roff+1] << 8);
+              roff += 2;
+              if (pmkid_cnt > 0 && roff + 16 <= eln) {
+                  const uint8_t* pmkid_ptr = rsne + roff;
+                  for (int i = 0; i < _pmkidCount; i++) {
+                      if (memcmp(_pmkids[i].bssid, bssid, 6) == 0 &&
+                          memcmp(_pmkids[i].client, client, 6) == 0) return;
+                  }
+                  if (_pmkidCount >= MAX_PMKID_ENTRIES) return;
+                  PMKIDEntry& p = _pmkids[_pmkidCount++];
+                  memcpy(p.bssid, bssid, 6);
+                  memcpy(p.client, client, 6);
+                  memcpy(p.pmkid, pmkid_ptr, 16);
+                  p.ts = millis();
+                  const Network* net = Scan.networkByBSSID(bssid);
+                  strlcpy(p.ssid, net ? net->ssid : "?", sizeof(p.ssid));
+                  _changes++;
+                  Log.log(LOG_SNIFF, "PMKID captured %02X:%02X:%02X...",
+                          bssid[0], bssid[1], bssid[2]);
+                  return;
+              }
             }
         }
+        next_ie:
         off += 2 + eln;
     }
 }
