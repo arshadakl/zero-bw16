@@ -2,60 +2,90 @@
 
 LedController Led;
 
-void LedController::init(int pin, bool activeLow) {
-    _pin = pin;
+void LedController::init(int pinRed, int pinGreen, bool activeLow) {
+    _pin       = pinRed;
+    _pinGreen  = pinGreen;
     _activeLow = activeLow;
-    pinMode(_pin, OUTPUT);
-    _write(false);
+    if (_pin >= 0)      { pinMode(_pin,      OUTPUT); }
+    if (_pinGreen >= 0) { pinMode(_pinGreen, OUTPUT); }
+    _write(false, false);
 }
 
 void LedController::setState(LedState s) {
-    _state = s;
+    _state      = s;
     _blinkPhase = 0;
-    _blinkCount = 0;
+    // When switching away from ATTACK, turn green off immediately
+    if (s != LED_ATTACK && _pinGreen >= 0)
+        digitalWrite(_pinGreen, _activeLow ? HIGH : LOW);
 }
 
 void LedController::setEnabled(bool en) {
     _enabled = en;
-    if (!en) _write(false);
+    if (!en) _write(false, false);
 }
 
 bool LedController::isEnabled() const { return _enabled; }
 
-void LedController::_write(bool on) {
-    if (_pin < 0) return;
-    _on = on;
-    digitalWrite(_pin, _activeLow ? !on : on);
+void LedController::_write(bool red, bool green) {
+    _on = red;
+    if (_pin >= 0)
+        digitalWrite(_pin, _activeLow ? !red : red);
+    if (_pinGreen >= 0)
+        digitalWrite(_pinGreen, _activeLow ? !green : green);
 }
 
 void LedController::tick() {
-    if (!_enabled || _pin < 0) return;
+    if (!_enabled) { _write(false, false); return; }
+    if (_pin < 0)  return;
+
     uint32_t now = millis();
+    bool hasGreen = (_pinGreen >= 0);
 
     switch (_state) {
     case LED_OFF:
-        _write(false);
+        _write(false, false);
         break;
+
     case LED_IDLE:
-        // slow blink 1Hz
-        if (now - _lastToggle >= 1000) { _lastToggle = now; _write(!_on); }
+        // Red slow blink 1 Hz
+        if (now - _lastToggle >= 1000) {
+            _lastToggle = now;
+            _write(!_on, false);
+        }
         break;
+
     case LED_SCAN:
-        // fast blink 8Hz
-        if (now - _lastToggle >= 125) { _lastToggle = now; _write(!_on); }
+        // Red fast blink 8 Hz
+        if (now - _lastToggle >= 125) {
+            _lastToggle = now;
+            _write(!_on, false);
+        }
         break;
+
     case LED_ATTACK:
-        // solid on
-        _write(true);
+        if (hasGreen) {
+            // Green solid, red off
+            _write(false, true);
+        } else {
+            // No green LED — 2 Hz blink on primary (clearly different from 1 Hz idle)
+            if (now - _lastToggle >= 500) {
+                _lastToggle = now;
+                _write(!_on, false);
+            }
+        }
         break;
+
     case LED_ERROR:
-        // double blink: on-off-on-off-pause
+        // Red double-blink then long pause
         if (now - _lastToggle >= 150) {
             _lastToggle = now;
             _blinkPhase++;
-            if (_blinkPhase == 1 || _blinkPhase == 3) _write(true);
-            else if (_blinkPhase == 2 || _blinkPhase == 4) _write(false);
-            else if (_blinkPhase >= 5) { _blinkPhase = 0; _lastToggle = now + 700; }
+            if (_blinkPhase == 1 || _blinkPhase == 3) _write(true,  false);
+            else if (_blinkPhase == 2 || _blinkPhase == 4) _write(false, false);
+            else if (_blinkPhase >= 5) {
+                _blinkPhase  = 0;
+                _lastToggle = now + 700; // long pause before repeating
+            }
         }
         break;
     }

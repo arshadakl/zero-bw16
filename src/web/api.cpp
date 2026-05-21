@@ -12,10 +12,6 @@
 
 ApiHandler Api;
 
-static bool _startsWith(const char* s, const char* pre) {
-    return strncmp(s, pre, strlen(pre)) == 0;
-}
-
 bool ApiHandler::handle(WiFiClient& client, const char* method, const char* path,
                          const char* body, int body_len) {
     // Strip query string for routing
@@ -56,13 +52,24 @@ bool ApiHandler::handle(WiFiClient& client, const char* method, const char* path
 
 void ApiHandler::_respond(WiFiClient& c, int code, const char* ct, const char* body) {
     const char* status = code==200?"OK":code==400?"Bad Request":"Internal Server Error";
+    int bodyLen = (int)strlen(body);
     char hdr[192];
     snprintf(hdr, sizeof(hdr),
         "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nAccess-Control-Allow-Origin: *\r\n"
         "Content-Length: %d\r\nConnection: close\r\n\r\n",
-        code, status, ct, (int)strlen(body));
+        code, status, ct, bodyLen);
     c.print(hdr);
-    c.print(body);
+    // Send in 512-byte chunks — large JSON responses can overflow WiFiClient's
+    // internal TX buffer if sent all at once on RTL8720DN.
+    const char* p = body;
+    int rem = bodyLen;
+    while (rem > 0) {
+        int chunk = rem < 512 ? rem : 512;
+        c.write((const uint8_t*)p, chunk);
+        p += chunk;
+        rem -= chunk;
+        yield();
+    }
 }
 void ApiHandler::_respondJson(WiFiClient& c, const char* json) { _respond(c, 200, "application/json", json); }
 void ApiHandler::_respondOk(WiFiClient& c)   { _respondJson(c, "{\"ok\":true}"); }
@@ -167,40 +174,90 @@ void ApiHandler::_getNetworks(WiFiClient& c) {
     _respondJson(c, json.c_str());
 }
 
-void ApiHandler::_postAttackStart(WiFiClient& c, const char* body, int len) {
+void ApiHandler::_postAttackStart(WiFiClient& c, const char* body, int /*len*/) {
     if (!body) { _respondErr(c, "no body"); return; }
     int mode   = _jsonInt(body, "mode", 1);
     int frames = _jsonInt(body, "frames", DEFAULT_DEAUTH_FRAMES);
     int delay  = _jsonInt(body, "delay", DEFAULT_SEND_DELAY);
     int reason = _jsonInt(body, "reason", DEFAULT_DEAUTH_REASON);
 
-    Attack.setFrames(frames);
-    Attack.setDelay(delay);
-    Attack.setReason(reason);
+    Attack.setFrames((uint8_t)frames);
+    Attack.setDelay((uint8_t)delay);
+    Attack.setReason((uint16_t)reason);
     Attack.clearTargets();
 
-    // Parse targets array: find all "bssid":"XX:XX..." patterns
+    // Parse targets array: find all "bssid":"XX:XX..." entries.
+    // Each entry looks for its OWN "client" by limiting the search to before the
+    // next "bssid" field so we don't cross into the next target object.
+    // Helper: advance pointer past optional whitespace + colon + whitespace,
+    // then past opening quote. Returns pointer to first char of value, or
+    // nullptr if the pattern `: "` is not found (handles compact AND pretty JSON).
+    auto skipToValue = [](const char* q) -> const char* {
+        while (*q == ' ' || *q == '\t' || *q == '\n' || *q == '\r') q++;
+        if (*q != ':') return nullptr;
+        q++;
+        while (*q == ' ' || *q == '\t' || *q == '\n' || *q == '\r') q++;
+        if (*q != '"') return nullptr;
+        return q + 1; // first char of value
+    };
+
+    uint8_t firstBSSID[6] = {0};
+    bool gotFirst = false;
     const char* p = body;
-    while ((p = strstr(p, "\"bssid\":\"")) != nullptr) {
-        p += 9;
-        char tmp[18]; int i = 0;
+    while ((p = strstr(p, "\"bssid\"")) != nullptr) {
+        p += 7;
+        const char* val = skipToValue(p);
+        if (!val) { p++; continue; }
+        p = val;
+
+        char tmp[18] = {0}; int i = 0;
         while (*p && *p != '"' && i < 17) tmp[i++] = *p++;
         tmp[i] = 0;
-        // Parse client if present
-        const char* cp = strstr(p, "\"client\":\"");
-        char ctmp[18] = {0};
-        if (cp) { cp+=10; i=0; while(*cp&&*cp!='"'&&i<17) ctmp[i++]=*cp++; ctmp[i]=0; }
+        if (*p == '"') p++;
 
-        uint8_t bssid_b[6]={0}, client_b[6]={0};
+        // Limit client search to this object (before next "bssid")
+        const char* nextBssid = strstr(p, "\"bssid\"");
+        const char* objEnd    = nextBssid ? nextBssid : (body + strlen(body));
+        const char* cp        = strstr(p, "\"client\"");
+        char ctmp[18] = {0};
+        if (cp && cp < objEnd) {
+            const char* cv = skipToValue(cp + 8);
+            if (cv) {
+                i = 0;
+                while (*cv && *cv != '"' && i < 17) ctmp[i++] = *cv++;
+                ctmp[i] = 0;
+            }
+        }
+
+        uint8_t bssid_b[6]  = {0};
+        uint8_t client_b[6] = {0};
         sscanf(tmp, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                &bssid_b[0],&bssid_b[1],&bssid_b[2],&bssid_b[3],&bssid_b[4],&bssid_b[5]);
-        if (ctmp[0]) sscanf(ctmp, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-               &client_b[0],&client_b[1],&client_b[2],&client_b[3],&client_b[4],&client_b[5]);
-        Attack.addTarget(bssid_b, ctmp[0] ? client_b : nullptr);
+
+        bool hasClient = false;
+        if (ctmp[0]) {
+            sscanf(ctmp, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &client_b[0],&client_b[1],&client_b[2],&client_b[3],&client_b[4],&client_b[5]);
+            if (memcmp(client_b, "\0\0\0\0\0\0", 6) != 0)
+                hasClient = true;
+        }
+        Attack.addTarget(bssid_b, hasClient ? client_b : nullptr);
+        if (!gotFirst) { memcpy(firstBSSID, bssid_b, 6); gotFirst = true; }
     }
 
-    if (Attack.targetCount() == 0 && mode != 5) { // beacon spam needs no targets
+    Log.log(LOG_INFO, "atk targets=%d mode=%d body_len=%d",
+            Attack.targetCount(), mode, (int)strlen(body));
+
+    if (Attack.targetCount() == 0 && mode != (int)ATK_BEACON_SPAM) {
         _respondErr(c, "no targets"); return;
+    }
+
+    // Evil Twin: look up SSID and channel from scanner for the first target
+    if (mode == (int)ATK_EVIL_TWIN) {
+        if (!gotFirst) { _respondErr(c, "evil twin: no target"); return; }
+        const Network* net = Scan.networkByBSSID(firstBSSID);
+        if (!net) { _respondErr(c, "evil twin: target not in scan"); return; }
+        Attack.setEvilTwinTarget(firstBSSID, net->ssid, net->channel);
     }
 
     Attack.startAttack((AttackMode)mode);
@@ -327,7 +384,7 @@ void ApiHandler::_getSniffHandshakes(WiFiClient& c) {
 void ApiHandler::_postSniffClearProbes(WiFiClient& c)  { Sniff.clearProbes();   _respondOk(c); }
 void ApiHandler::_postSniffClearClients(WiFiClient& c) { Sniff.clearClients();  _respondOk(c); }
 
-void ApiHandler::_postBeaconStart(WiFiClient& c, const char* body, int len) {
+void ApiHandler::_postBeaconStart(WiFiClient& c, const char* body, int /*len*/) {
     if (!body) { _respondErr(c, "no body"); return; }
     int ch   = _jsonInt(body, "channel", 6);
     int intv = _jsonInt(body, "interval", 100);
@@ -341,7 +398,7 @@ void ApiHandler::_postBeaconStart(WiFiClient& c, const char* body, int len) {
         arr = strchr(arr, '['); if (!arr) { _respondErr(c, "no ssids"); return; }
         arr++;
         while (*arr) {
-            while (*arr == ' ' || *arr == ',') arr++;
+            while (*arr == ' ' || *arr == ',' || *arr == '\n' || *arr == '\r' || *arr == '\t') arr++;
             if (*arr == ']') break;
             if (*arr == '"') {
                 arr++;
@@ -351,6 +408,12 @@ void ApiHandler::_postBeaconStart(WiFiClient& c, const char* body, int len) {
                 Attack.addBeaconSSID(ssid);
             } else arr++;
         }
+    }
+    Log.log(LOG_INFO, "beacon ssids=%d ch=%d body_len=%d",
+            Attack.beaconSSIDCount(), ch, (int)strlen(body));
+
+    if (Attack.beaconSSIDCount() == 0) {
+        _respondErr(c, "no ssids parsed"); return;
     }
     Attack.startAttack(ATK_BEACON_SPAM);
     Led.setState(LED_ATTACK);
@@ -393,7 +456,7 @@ void ApiHandler::_getSettings(WiFiClient& c) {
     _respondJson(c, buf);
 }
 
-void ApiHandler::_postSettings(WiFiClient& c, const char* body, int len) {
+void ApiHandler::_postSettings(WiFiClient& c, const char* body, int /*len*/) {
     if (!body) { _respondErr(c, "no body"); return; }
     Settings& s = Nvs.cfg();
     int v;
@@ -405,12 +468,18 @@ void ApiHandler::_postSettings(WiFiClient& c, const char* body, int len) {
     v = _jsonInt(body, "auto_atk", -1);  if (v >= 0) s.auto_attack = v;
     v = _jsonInt(body, "led", -1);       if (v >= 0) { s.led_enabled = v; Led.setEnabled(v); }
     if (_jsonStr(body, "ap_ssid", tmp, sizeof(tmp))) strlcpy(s.ap_ssid, tmp, sizeof(s.ap_ssid));
-    if (_jsonStr(body, "ap_pass", tmp, sizeof(tmp))) {
-        if (strlen(tmp) >= 8)
+    if (_jsonStr(body, "ap_pass", tmp, sizeof(tmp)) && strcmp(tmp, "****") != 0) {
+        if (tmp[0] == '\0') {
+            // empty string → keep current password
+        } else if (strlen(tmp) >= 8) {
             strlcpy(s.ap_pass, tmp, sizeof(s.ap_pass));
-        else { _respondErr(c, "password min 8 chars"); return; }
+        } else {
+            _respondErr(c, "password min 8 chars"); return;
+        }
     }
     Nvs.save();
+    // Keep home channel in sync if AP channel changed
+    Attack.setHomeChannel(s.ap_channel);
     _respondOk(c);
 }
 

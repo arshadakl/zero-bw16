@@ -42,12 +42,11 @@ void WebServer::_tickDns() {
 
     // Build minimal DNS A response pointing to 192.168.1.1
     uint8_t resp[128];
-    memcpy(resp, buf, len < 12 ? len : 12); // copy header
-    resp[2] = 0x81; resp[3] = 0x80; // QR=1 Opcode=0 AA=1 RCODE=0
-    resp[4] = resp[5]; resp[5] = resp[5]; // QDCOUNT same
-    resp[6] = 0; resp[7] = 1;            // ANCOUNT = 1
-    resp[8] = 0; resp[9] = 0;            // NSCOUNT
-    resp[10] = 0; resp[11] = 0;          // ARCOUNT
+    memcpy(resp, buf, len < 12 ? len : 12); // copy header (incl. QDCOUNT at bytes 4-5)
+    resp[2] = 0x81; resp[3] = 0x80; // QR=1 AA=1 RD=1 RCODE=0
+    resp[6] = 0; resp[7] = 1;       // ANCOUNT = 1
+    resp[8] = 0; resp[9] = 0;       // NSCOUNT
+    resp[10] = 0; resp[11] = 0;     // ARCOUNT
     int off = 12;
     // Copy question section
     while (off < len && off < 64 && buf[off] != 0) off += buf[off] + 1;
@@ -69,61 +68,65 @@ void WebServer::_tickDns() {
 }
 
 void WebServer::_handleClient(WiFiClient& c) {
-    uint32_t timeout = millis() + 2000;
-    while (!c.available() && millis() < timeout) delay(1);
+    // Accumulate the complete HTTP request (headers + body) into one buffer
+    // before parsing. On RTL8720DN the WiFi driver delivers TCP data in bursts;
+    // reading line-by-line leaves body bytes undelivered when Content-Length > 0.
+    static char req[2048];
+    int n = 0;
+
+    uint32_t t = millis() + 2000;
+    while (!c.available() && millis() < t) delay(1);
     if (!c.available()) { c.stop(); return; }
 
-    char method[8]  = {0};
-    char path[128]  = {0};
-    int  content_len = 0;
-    char body[512]  = {0};
+    t = millis() + 4000;
+    while (millis() < t && n < (int)sizeof(req) - 1) {
+        int av = c.available();
+        if (av > 0) {
+            int take = av < ((int)sizeof(req) - 1 - n) ? av : ((int)sizeof(req) - 1 - n);
+            while (take--) req[n++] = c.read();
+            req[n] = '\0';
 
-    // Read request line
-    char line[256] = {0};
-    if (!_parseLine(c, line, sizeof(line))) { c.stop(); return; }
-    sscanf(line, "%7s %127s", method, path);
-
-    // Read headers
-    while (_parseLine(c, line, sizeof(line)) && strlen(line) > 0) {
-        if (_zbw_strncasecmp(line, "Content-Length:", 15) == 0)
-            content_len = atoi(line + 15);
-    }
-
-    // Read body
-    if (content_len > 0 && content_len < (int)sizeof(body) - 1) {
-        int got = 0;
-        timeout = millis() + 3000;
-        while (got < content_len && millis() < timeout) {
-            if (c.available()) body[got++] = c.read();
+            const char* hend = strstr(req, "\r\n\r\n");
+            if (hend) {
+                int clen = 0;
+                const char* p = req;
+                while (p < hend) {
+                    if (_zbw_strncasecmp(p, "content-length:", 15) == 0) {
+                        const char* v = p + 15;
+                        while (*v == ' ') v++;
+                        clen = atoi(v);
+                        break;
+                    }
+                    const char* nl = (const char*)memchr(p, '\n', hend - p);
+                    if (!nl) break;
+                    p = nl + 1;
+                }
+                int body_start = (int)(hend - req) + 4;
+                if (n - body_start >= clen) break;
+            }
+        } else {
+            yield();
+            delay(10);
         }
-        body[got] = 0;
     }
 
-    // Route
+    char method[8] = {0}, path[128] = {0};
+    sscanf(req, "%7s %127s", method, path);
+
+    const char* hend = strstr(req, "\r\n\r\n");
+    const char* body = hend ? hend + 4 : req + n;
+    int body_len = hend ? (int)(n - (int)(body - req)) : 0;
+    if (body_len < 0) body_len = 0;
+
     if (strcmp(path, "/events") == 0) {
-        _serveSSE(c); return; // keep connection
+        _serveSSE(c); return;
     }
     if (strncmp(path, "/api/", 5) == 0) {
-        if (!Api.handle(c, method, path, body, content_len)) _serve404(c);
+        if (!Api.handle(c, method, path, body, body_len)) _serve404(c);
         c.stop(); return;
     }
-    // All other paths → main page (captive portal)
     _serveIndex(c);
     c.stop();
-}
-
-bool WebServer::_parseLine(WiFiClient& c, char* buf, int maxlen) {
-    uint32_t t = millis() + 1000;
-    int i = 0;
-    while (millis() < t) {
-        if (!c.available()) { delay(1); continue; }
-        char ch = c.read();
-        if (ch == '\r') continue;
-        if (ch == '\n') { buf[i] = 0; return true; }
-        if (i < maxlen - 1) buf[i++] = ch;
-    }
-    buf[i] = 0;
-    return i > 0;
 }
 
 void WebServer::_serveIndex(WiFiClient& c) {

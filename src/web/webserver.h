@@ -21,7 +21,6 @@ private:
     uint32_t _lastStats = 0;
 
     void _handleClient(WiFiClient& c);
-    bool _parseLine(WiFiClient& c, char* buf, int maxlen);
     void _serveIndex(WiFiClient& c);
     void _serveSSE(WiFiClient& c);
     void _serve404(WiFiClient& c);

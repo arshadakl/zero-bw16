@@ -46,9 +46,14 @@ public:
     bool isRunning() const;
     AttackMode currentMode() const;
 
+    // Must be called once with the AP's operating channel so the attacker
+    // can restore the radio back to AP channel after each injection burst.
+    void setHomeChannel(uint8_t ch);
+
     // Beacon spam
     void addBeaconSSID(const char* ssid);
     void clearBeaconSSIDs();
+    int  beaconSSIDCount() const;
     void setBeaconChannel(uint8_t ch);
     void setBeaconInterval(uint16_t ms);
 
@@ -86,6 +91,8 @@ private:
     uint8_t _etBSSID[6];
     uint8_t _etChannel = 1;
     bool _etActive = false;
+
+    uint8_t _homeChannel = 6; // AP operating channel; restored after each TX burst
 
     AttackStats _stats;
     uint32_t _lastTx = 0;

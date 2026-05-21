@@ -1,24 +1,59 @@
 #include "scanner.h"
-#include <WiFi.h>
 #include "../log.h"
+#include "wifi_conf.h"
 
 Scanner Scan;
 
+static Scanner*      _scanInst = nullptr;
+static volatile bool _cbDone   = false;
+
+static rtw_result_t _onScanResult(rtw_scan_handler_result_t* item) {
+    if (item->scan_complete) {
+        _cbDone = true;
+        return (rtw_result_t)RTW_SUCCESS;
+    }
+    if (_scanInst) _scanInst->_addScanResult(&item->ap_details);
+    return (rtw_result_t)RTW_SUCCESS;
+}
+
+void Scanner::_addScanResult(const void* ap_ptr) {
+    if (_count >= MAX_NETWORKS) return;
+    const rtw_scan_result_t& ap = *(const rtw_scan_result_t*)ap_ptr;
+    Network& net = _nets[_count++];
+    memset(&net, 0, sizeof(net));
+
+    int ssidlen = ap.SSID.len < 32 ? ap.SSID.len : 32;
+    memcpy(net.ssid, ap.SSID.val, ssidlen);
+    net.ssid[ssidlen] = 0;
+
+    memcpy(net.bssid, ap.BSSID.octet, 6);
+    net.rssi    = (int8_t)ap.signal_strength;
+    net.channel = (uint8_t)ap.channel;
+    net.freq    = (ap.band == RTW_802_11_BAND_5GHZ) ? 1 : 0;
+    net.hidden  = (ap.SSID.len == 0);
+
+    uint32_t sec = (uint32_t)ap.security;
+    if      (sec & WEP_ENABLED)   net.encryption = 5;
+    else if (sec & WPA2_SECURITY) net.encryption = 4;
+    else if (sec & WPA_SECURITY)  net.encryption = 2;
+
+    net.pmf = (sec & AES_CMAC_ENABLED) != 0;
+    net.wps = (ap.wps_type != RTW_WPS_TYPE_NONE);
+
+    net.rssi_history[0] = net.rssi;
+    net.rssi_idx = 1;
+}
+
 void Scanner::init() {
-    _count = 0;
+    _count    = 0;
     _scanning = false;
 }
 
 bool Scanner::scan() {
     _scanning = true;
     Log.log(LOG_INFO, "Scan started");
-    int n = WiFi.scanNetworks();
-    _scanning = false;
-    if (n < 0) {
-        Log.log(LOG_ERROR, "Scan failed: %d", n);
-        return false;
-    }
-    // Save previous BSSID→client_count mapping before overwriting _nets
+
+    // Preserve sniffer-populated client counts across scan refresh
     uint8_t prev_bssids[MAX_NETWORKS][6];
     uint8_t prev_clients[MAX_NETWORKS];
     int prev_count = _count;
@@ -27,34 +62,30 @@ bool Scanner::scan() {
         prev_clients[i] = _nets[i].client_count;
     }
 
-    _count = 0;
-    for (int i = 0; i < n && _count < MAX_NETWORKS; i++) {
-        Network& net = _nets[_count];
-        memset(&net, 0, sizeof(net)); // clear stale data from previous scan slot
-        String ssid = WiFi.SSID(i);
-        strncpy(net.ssid, ssid.c_str(), sizeof(net.ssid) - 1);
-        net.ssid[sizeof(net.ssid) - 1] = '\0';
-        WiFi.BSSID(net.bssid);   // fills buffer for last-indexed result
-        net.rssi = WiFi.RSSI(i);
-        net.channel = 0;          // WiFi.channel(i) not available on AmebaD
-        net.encryption = WiFi.encryptionType(i);
-        net.freq = IS_5GHZ_CH(net.channel) ? 1 : 0;
-        net.hidden = (ssid.length() == 0);
-        net.wps = false;
-        net.pmf = false;
-        // Restore client_count from previous scan using saved mapping
-        net.client_count = 0;
+    _count    = 0;
+    _cbDone   = false;
+    _scanInst = this;
+    wifi_scan_networks(_onScanResult, nullptr);
+
+    uint32_t deadline = millis() + 8000;
+    while (!_cbDone && millis() < deadline) delay(50);
+    _scanInst = nullptr;
+    _scanning = false;
+
+    if (!_cbDone) {
+        Log.log(LOG_ERROR, "Scan timeout");
+        return false;
+    }
+
+    for (int i = 0; i < _count; i++) {
         for (int j = 0; j < prev_count; j++) {
-            if (memcmp(prev_bssids[j], net.bssid, 6) == 0) {
-                net.client_count = prev_clients[j];
+            if (memcmp(prev_bssids[j], _nets[i].bssid, 6) == 0) {
+                _nets[i].client_count = prev_clients[j];
                 break;
             }
         }
-        // Rolling RSSI history
-        net.rssi_history[net.rssi_idx % 10] = net.rssi;
-        net.rssi_idx = (net.rssi_idx + 1) % 10;
-        _count++;
     }
+
     _lastScan = millis();
     _changes++;
     Log.log(LOG_INFO, "Scan done: %d networks", _count);
@@ -62,7 +93,8 @@ bool Scanner::scan() {
 }
 
 bool Scanner::isScanning() const { return _scanning; }
-int Scanner::networkCount() const { return _count; }
+int  Scanner::networkCount() const { return _count; }
+
 const Network* Scanner::network(int i) const {
     if (i < 0 || i >= _count) return nullptr;
     return &_nets[i];

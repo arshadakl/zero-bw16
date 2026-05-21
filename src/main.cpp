@@ -13,7 +13,9 @@
 
 static void startAP() {
     Settings& cfg = Nvs.cfg();
-    WiFi.apbegin(cfg.ap_ssid, cfg.ap_pass, cfg.ap_channel);
+    char chStr[4];
+    snprintf(chStr, sizeof(chStr), "%d", (int)cfg.ap_channel);
+    WiFi.apbegin(cfg.ap_ssid, cfg.ap_pass, chStr);
     Log.log(LOG_INFO, "AP: SSID=%s CH=%d IP=%s",
             cfg.ap_ssid, cfg.ap_channel, AP_IP);
 }
@@ -26,7 +28,7 @@ void setup() {
     // Init subsystems
     Log.init();
     Nvs.init();
-    Led.init(LED_PIN, true);
+    Led.init(LED_PIN, LED_PIN_GREEN, true);
     Button.init(BUTTON_PIN, true);
 
     Log.log(LOG_INFO, "Boot");
@@ -34,6 +36,7 @@ void setup() {
     // Start WiFi AP
     startAP();
     delay(500);
+    Attack.setHomeChannel(Nvs.cfg().ap_channel);
 
     // Init modules
     Scan.init();

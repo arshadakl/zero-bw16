@@ -54,20 +54,23 @@ static inline int _zbw_strncasecmp(const char* a, const char* b, size_t n) {
 #define DEFAULT_DEAUTH_REASON  2
 
 // --- GPIO ---
-#define LED_PIN    PA27   // BW16 built-in LED (active low)
+#define LED_PIN        PA27  // BW16 user LED (active low)
+// Set LED_PIN_GREEN to a real pin number if your board has a second green LED.
+// -1 = not present; attack state then uses a 2 Hz blink on the primary LED instead.
+#define LED_PIN_GREEN  -1
 #define BUTTON_PIN PA12   // optional hardware button
 
 // --- Web server ---
 #define WEB_PORT   80
 #define SSE_INTERVAL_MS 1000
 
-// --- Limits ---
-#define MAX_NETWORKS      30
-#define MAX_PROBE_ENTRIES 50
-#define MAX_CLIENT_ENTRIES 100
-#define MAX_PMKID_ENTRIES  20
-#define MAX_LOG_ENTRIES   200
-#define MAX_BEACON_SSIDS   50
+// --- Limits (tuned for BD_RAM_NS on RTL8720DN) ---
+#define MAX_NETWORKS       20
+#define MAX_PROBE_ENTRIES  20
+#define MAX_CLIENT_ENTRIES 20
+#define MAX_PMKID_ENTRIES  10
+#define MAX_LOG_ENTRIES    40
+#define MAX_BEACON_SSIDS   20
 
 // --- NVS ---
 #define NVS_EEPROM_SIZE   256

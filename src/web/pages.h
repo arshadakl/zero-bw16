@@ -106,6 +106,7 @@ progress{width:100%;height:8px;border-radius:4px;}
         <option value="3">Auth Flood</option>
         <option value="4">Assoc Flood</option>
         <option value="6">Evil Twin AP</option>
+        <option value="7">Karma Attack</option>
       </select>
       <select id="atk-reason" title="Reason code">
         <option value="1">1 - Unspecified</option>
@@ -227,7 +228,7 @@ progress{width:100%;height:8px;border-radius:4px;}
   <div class="card">
     <div class="card-title">Access Point</div>
     <div class="form-row"><label>SSID</label><input type="text" id="s-ssid" value="zero-bw16" maxlength="31" style="width:200px"></div>
-    <div class="form-row"><label>Password</label><input type="password" id="s-pass" value="zerobw16!" maxlength="63" style="width:200px"></div>
+    <div class="form-row"><label>Password</label><input type="password" id="s-pass" placeholder="Leave blank to keep current" maxlength="63" style="width:220px"></div>
     <div class="form-row"><label>Channel</label><input type="number" id="s-ch" value="6" min="1" max="165" style="width:80px"></div>
   </div>
   <div class="card">
@@ -479,7 +480,7 @@ function loadSettings(){
     document.getElementById('s-frames').value=d.frames||5;
     document.getElementById('s-delay').value=d.delay||5;
     document.getElementById('s-ssid').value=d.ap_ssid||'zero-bw16';
-    document.getElementById('s-pass').value=d.ap_pass||'';
+    document.getElementById('s-pass').value='';
     document.getElementById('s-ch').value=d.ap_ch||6;
     document.getElementById('s-autoscan').checked=!!d.auto_scan;
     document.getElementById('s-autoatk').checked=!!d.auto_atk;
@@ -488,19 +489,20 @@ function loadSettings(){
 }
 
 function saveSettings(){
+  var pass=document.getElementById('s-pass').value;
   var cfg={
     frames:parseInt(document.getElementById('s-frames').value),
     delay:parseInt(document.getElementById('s-delay').value),
     ap_ssid:document.getElementById('s-ssid').value,
-    ap_pass:document.getElementById('s-pass').value,
     ap_ch:parseInt(document.getElementById('s-ch').value),
     auto_scan:document.getElementById('s-autoscan').checked?1:0,
     auto_atk:document.getElementById('s-autoatk').checked?1:0,
     led:document.getElementById('s-led').checked?1:0,
   };
+  if(pass) cfg.ap_pass=pass;
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(cfg)}).then(r=>r.json()).then(d=>{
-    alert(d.ok?'Settings saved!':'Error saving');
+    alert(d.ok?'Settings saved!':'Error: '+d.error);
   });
 }
 

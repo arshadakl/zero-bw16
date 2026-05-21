@@ -31,6 +31,9 @@ public:
     uint32_t lastScanTime() const;
     uint32_t changeCounter() const;
 
+    // Called by low-level scan callback; void* avoids SDK type in header
+    void _addScanResult(const void* ap_detail);
+
 private:
     Network _nets[MAX_NETWORKS];
     int _count = 0;
@@ -38,8 +41,6 @@ private:
     uint32_t _lastScan = 0;
     uint32_t _changes = 0;
 
-    void _parseIE(const uint8_t* ie, int ie_len, bool& wps, bool& pmf);
-    bool _isBand5(int16_t freq_mhz);
     void _bssidStr(const uint8_t* b, char* out);
 };
 

@@ -11,7 +11,7 @@ static const char* NVS_KEY = "cfg";
 void NVS::_defaults() {
     memset(&_cfg, 0, sizeof(_cfg));
     memcpy(_cfg.magic, NVS_MAGIC, 4);
-    _cfg.version = 1;
+    _cfg.version = 2;
     strlcpy(_cfg.ap_ssid, DEFAULT_AP_SSID, sizeof(_cfg.ap_ssid));
     strlcpy(_cfg.ap_pass, DEFAULT_AP_PASS, sizeof(_cfg.ap_pass));
     _cfg.ap_channel    = DEFAULT_AP_CHANNEL;
@@ -36,7 +36,7 @@ void NVS::load() {
         _prefs.getBytes(NVS_KEY, &_cfg, sizeof(_cfg));
     }
     _prefs.end();
-    if (memcmp(_cfg.magic, NVS_MAGIC, 4) != 0 || _cfg.version != 1) {
+    if (memcmp(_cfg.magic, NVS_MAGIC, 4) != 0 || _cfg.version != 2) {
         Log.log(LOG_WARN, "NVS invalid, loading defaults");
         _defaults();
         save();

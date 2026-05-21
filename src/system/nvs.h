@@ -4,7 +4,7 @@
 
 struct Settings {
     char magic[4];          // "ZBW\0"
-    uint8_t version;
+    uint8_t version;        // bump this to force NVS reset on next boot
     char ap_ssid[32];
     char ap_pass[32];
     uint8_t ap_channel;
