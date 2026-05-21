@@ -51,22 +51,32 @@ if (-not $FQBN) {
 }
 Write-Host "[+] Detected FQBN: $FQBN" -ForegroundColor Green
 
-# Detect connected COM ports
+# Detect connected COM ports (use registry — more reliable than WMI for USB serial)
 Write-Host ""
 Write-Host "[*] Scanning for connected serial ports..." -ForegroundColor Yellow
-$ports = arduino-cli board list 2>$null
-Write-Host $ports
 
-$comPorts = Get-WmiObject Win32_SerialPort | Select-Object DeviceID, Description
-if ($comPorts) {
-    Write-Host ""
-    Write-Host "Available COM ports:" -ForegroundColor Cyan
-    $comPorts | ForEach-Object { Write-Host "  $($_.DeviceID) - $($_.Description)" }
-} else {
+$comPorts = @()
+# Method 1: Registry (catches CH340/CP210x/etc reliably)
+$regPath = "HKLM:\HARDWARE\DEVICEMAP\SERIALCOMM"
+if (Test-Path $regPath) {
+    Get-ItemProperty $regPath | Get-Member -MemberType NoteProperty |
+        Where-Object { $_.Name -notlike "PS*" } |
+        ForEach-Object { $comPorts += (Get-ItemProperty $regPath).$($_.Name) }
+}
+# Method 2: .NET fallback
+if ($comPorts.Count -eq 0) {
+    $comPorts = [System.IO.Ports.SerialPort]::GetPortNames()
+}
+
+if ($comPorts.Count -eq 0) {
     Write-Host "[!] No COM ports detected. Connect your BW16 module." -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
 }
+
+Write-Host ""
+Write-Host "Available COM ports:" -ForegroundColor Cyan
+$comPorts | ForEach-Object { Write-Host "  $_" }
 
 Write-Host ""
 $port = Read-Host "Enter COM port (e.g. COM3)"
