@@ -181,7 +181,6 @@ void ApiHandler::_postAttackStart(WiFiClient& c, const char* body, int len) {
 
     // Parse targets array: find all "bssid":"XX:XX..." patterns
     const char* p = body;
-    char bssid_s[18], client_s[18];
     while ((p = strstr(p, "\"bssid\":\"")) != nullptr) {
         p += 9;
         char tmp[18]; int i = 0;
@@ -365,7 +364,6 @@ void ApiHandler::_postBeaconStop(WiFiClient& c) {
 void ApiHandler::_getLog(WiFiClient& c) {
     static const char* lvlNames[] = {"info","warn","error","attack","sniff"};
     String json = "{\"entries\":[";
-    int cnt = Log.count();
     const LogEntry* entries = Log.entries();
     bool first = true;
     for (int i = 0; i < MAX_LOG_ENTRIES; i++) {
@@ -391,7 +389,7 @@ void ApiHandler::_getSettings(WiFiClient& c) {
         "{\"frames\":%d,\"delay\":%d,\"ap_ssid\":\"%s\",\"ap_pass\":\"%s\","
         "\"ap_ch\":%d,\"auto_scan\":%d,\"auto_atk\":%d,\"led\":%d,\"version\":\"%s\"}",
         s.deauth_frames, s.send_delay_ms, s.ap_ssid, "****",
-        s.ap_channel, s.auto_scan, s.auto_attack, s.led_enabled, FW_VERSION);
+        s.ap_channel, s.auto_scan, s.auto_attack, s.led_enabled, APP_VERSION);
     _respondJson(c, buf);
 }
 
