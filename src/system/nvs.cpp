@@ -1,8 +1,12 @@
 #include "nvs.h"
-#include <EEPROM.h>
+#include <Preferences.h>
 #include "../log.h"
 
 NVS Nvs;
+
+static Preferences _prefs;
+static const char* NVS_NS = "zbw";
+static const char* NVS_KEY = "cfg";
 
 void NVS::_defaults() {
     memset(&_cfg, 0, sizeof(_cfg));
@@ -22,12 +26,16 @@ void NVS::_defaults() {
 }
 
 void NVS::init() {
-    EEPROM.begin(NVS_EEPROM_SIZE);
     load();
 }
 
 void NVS::load() {
-    EEPROM.get(0, _cfg);
+    _prefs.begin(NVS_NS, true);
+    size_t len = _prefs.getBytesLength(NVS_KEY);
+    if (len == sizeof(_cfg)) {
+        _prefs.getBytes(NVS_KEY, &_cfg, sizeof(_cfg));
+    }
+    _prefs.end();
     if (memcmp(_cfg.magic, NVS_MAGIC, 4) != 0 || _cfg.version != 1) {
         Log.log(LOG_WARN, "NVS invalid, loading defaults");
         _defaults();
@@ -36,8 +44,9 @@ void NVS::load() {
 }
 
 void NVS::save() {
-    EEPROM.put(0, _cfg);
-    EEPROM.commit();
+    _prefs.begin(NVS_NS, false);
+    _prefs.putBytes(NVS_KEY, &_cfg, sizeof(_cfg));
+    _prefs.end();
 }
 
 void NVS::reset() {
