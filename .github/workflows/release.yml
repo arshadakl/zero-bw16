@@ -1,0 +1,74 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        run: pio run -e bw16
+
+      - name: Rename binary
+        run: cp .pio/build/bw16/firmware.bin zero-bw16-${{ github.ref_name }}.bin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Zero-BW16 ${{ github.ref_name }}
+          files: zero-bw16-${{ github.ref_name }}.bin
+          body: |
+            ## Zero-BW16 ${{ github.ref_name }}
+
+            Pre-built firmware for **AI-Thinker BW16 (RTL8720DN)**.
+
+            ### Flash Instructions
+
+            **Step 1 — Enter download mode:**
+            1. Hold **BOOT** button
+            2. Press and release **RESET**
+            3. Release **BOOT**
+
+            **Step 2 — Flash (pick one method):**
+
+            **PlatformIO:**
+            ```bash
+            pio run -t upload
+            ```
+
+            **Realtek AmebaD ImageTool (Windows GUI):**
+            - Download from [ambiot/ambd_sdk](https://github.com/ambiot/ambd_sdk) → `tools/`
+            - Open tool → select COM port → load `zero-bw16-${{ github.ref_name }}.bin` → Download
+
+            **Step 3 — Connect:**
+            - WiFi: `zero-bw16` / `zerobw16!`
+            - Web UI: `http://192.168.1.1`
+
+            > Change default credentials immediately in the Settings tab.
+
+            ### OTA Updates
+            After first flash, upload new `.bin` directly at `http://192.168.1.1` → Settings → OTA Update. No USB cable needed.
