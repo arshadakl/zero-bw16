@@ -13,8 +13,7 @@
 
 static void startAP() {
     Settings& cfg = Nvs.cfg();
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(cfg.ap_ssid, cfg.ap_pass, cfg.ap_channel);
+    WiFi.apbegin(cfg.ap_ssid, cfg.ap_pass, cfg.ap_channel);
     Log.log(LOG_INFO, "AP: SSID=%s CH=%d IP=%s",
             cfg.ap_ssid, cfg.ap_channel, AP_IP);
 }
@@ -22,7 +21,7 @@ static void startAP() {
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.printf("\n\n=== %s v%s ===\n", PROJECT_NAME, FW_VERSION);
+    SERIAL_PRINTF("\n\n=== %s v%s ===\n", PROJECT_NAME, APP_VERSION);
 
     // Init subsystems
     Log.init();
@@ -107,7 +106,7 @@ void loop() {
             char json[160];
             snprintf(json, sizeof(json),
                 "{\"type\":\"log\",\"ts\":%lu,\"level\":\"%s\",\"msg\":\"%s\"}",
-                e->ts, lvlNames[min((int)e->level, 4)], e->msg);
+                e->ts, lvlNames[(int)e->level < 4 ? (int)e->level : 4], e->msg);
             WebSrv.pushSSE(json);
         }
     }

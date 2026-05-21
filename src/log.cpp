@@ -17,7 +17,7 @@ void Logger::log(LogLevel level, const char* fmt, ...) {
     va_start(args, fmt);
     vsnprintf(e.msg, sizeof(e.msg), fmt, args);
     va_end(args);
-    Serial.printf("[%lu] %s\n", e.ts, e.msg);
+    SERIAL_PRINTF("[%lu] %s\n", e.ts, e.msg);
     _head = (_head + 1) % MAX_LOG_ENTRIES;
     if (_count < MAX_LOG_ENTRIES) _count++;
     _changes++;

@@ -1,7 +1,46 @@
 #pragma once
 
-#define FW_VERSION        "1.0.0"
+// Realtek SDK defines FW_VERSION as 0x0100 — use APP_VERSION instead
+#ifdef FW_VERSION
+#undef FW_VERSION
+#endif
+#define APP_VERSION       "1.0.0"
 #define PROJECT_NAME      "zero-bw16"
+
+// ---- Realtek AmebaD compat ------------------------------------------------
+// min/max not in global namespace on this toolchain
+#ifndef min
+#define min(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif
+
+// strlcpy missing from Realtek toolchain
+#include <string.h>
+static inline size_t _zbw_strlcpy(char* d, const char* s, size_t n) {
+    size_t l = strlen(s);
+    if (n) { size_t c = (l < n-1) ? l : n-1; memcpy(d, s, c); d[c] = '\0'; }
+    return l;
+}
+#define strlcpy _zbw_strlcpy
+
+// strncasecmp missing from Realtek toolchain
+#include <ctype.h>
+static inline int _zbw_strncasecmp(const char* a, const char* b, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        int d = tolower((uint8_t)a[i]) - tolower((uint8_t)b[i]);
+        if (d || !a[i]) return d;
+    }
+    return 0;
+}
+#define strncasecmp _zbw_strncasecmp
+
+// Serial.printf not available on Realtek AmebaD
+#define SERIAL_PRINTF(fmt, ...) do { \
+    char _sp[160]; snprintf(_sp, sizeof(_sp), fmt, ##__VA_ARGS__); \
+    Serial.print(_sp); } while(0)
+// ---------------------------------------------------------------------------
 
 // --- AP defaults ---
 #define DEFAULT_AP_SSID   "zero-bw16"

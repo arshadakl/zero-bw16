@@ -6,6 +6,7 @@ extern "C" {
     extern int ota_update_start(void);
     extern int ota_update_write(uint8_t* buf, uint32_t len);
     extern int ota_update_end(void);
+    extern void sys_reset(void);
 }
 
 OtaHandler Ota;

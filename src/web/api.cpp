@@ -56,9 +56,13 @@ bool ApiHandler::handle(WiFiClient& client, const char* method, const char* path
 
 void ApiHandler::_respond(WiFiClient& c, int code, const char* ct, const char* body) {
     const char* status = code==200?"OK":code==400?"Bad Request":"Internal Server Error";
-    c.printf("HTTP/1.1 %d %s\r\nContent-Type: %s\r\nAccess-Control-Allow-Origin: *\r\n"
-             "Content-Length: %d\r\nConnection: close\r\n\r\n%s",
-             code, status, ct, strlen(body), body);
+    char hdr[192];
+    snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nAccess-Control-Allow-Origin: *\r\n"
+        "Content-Length: %d\r\nConnection: close\r\n\r\n",
+        code, status, ct, (int)strlen(body));
+    c.print(hdr);
+    c.print(body);
 }
 void ApiHandler::_respondJson(WiFiClient& c, const char* json) { _respond(c, 200, "application/json", json); }
 void ApiHandler::_respondOk(WiFiClient& c)   { _respondJson(c, "{\"ok\":true}"); }
@@ -371,7 +375,7 @@ void ApiHandler::_getLog(WiFiClient& c) {
         char msg_e[100]; _jsonEsc(e.msg, msg_e, sizeof(msg_e));
         char buf[140];
         snprintf(buf, sizeof(buf), "{\"ts\":%lu,\"level\":\"%s\",\"msg\":\"%s\"}",
-                 e.ts, lvlNames[min((int)e.level, 4)], msg_e);
+                 e.ts, lvlNames[(int)e.level < 4 ? (int)e.level : 4], msg_e);
         json += buf;
     }
     json += "]}";

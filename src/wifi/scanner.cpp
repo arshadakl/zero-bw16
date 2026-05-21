@@ -32,10 +32,11 @@ bool Scanner::scan() {
         Network& net = _nets[_count];
         memset(&net, 0, sizeof(net)); // clear stale data from previous scan slot
         String ssid = WiFi.SSID(i);
-        strlcpy(net.ssid, ssid.c_str(), sizeof(net.ssid));
-        memcpy(net.bssid, WiFi.BSSID(i), 6);
+        strncpy(net.ssid, ssid.c_str(), sizeof(net.ssid) - 1);
+        net.ssid[sizeof(net.ssid) - 1] = '\0';
+        WiFi.BSSID(net.bssid);   // fills buffer for last-indexed result
         net.rssi = WiFi.RSSI(i);
-        net.channel = WiFi.channel(i);
+        net.channel = 0;          // WiFi.channel(i) not available on AmebaD
         net.encryption = WiFi.encryptionType(i);
         net.freq = IS_5GHZ_CH(net.channel) ? 1 : 0;
         net.hidden = (ssid.length() == 0);
@@ -77,7 +78,8 @@ Network* Scanner::networkByBSSID(const uint8_t* bssid) {
 void Scanner::updateClientCount(const uint8_t* bssid, int delta) {
     Network* n = networkByBSSID(bssid);
     if (n) {
-        n->client_count = max(0, (int)n->client_count + delta);
+        int nc = (int)n->client_count + delta;
+        n->client_count = nc < 0 ? 0 : (uint8_t)nc;
         _changes++;
     }
 }

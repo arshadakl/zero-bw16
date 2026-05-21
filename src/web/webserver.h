@@ -3,9 +3,11 @@
 #include <WiFiServer.h>
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
+#include "../config.h"
 
 class WebServer {
 public:
+    WebServer() : _srv(WEB_PORT) {}
     void init();
     void tick();    // call from loop()
     void pushSSE(const char* json);  // push to SSE client if connected

@@ -9,7 +9,7 @@
 WebServer WebSrv;
 
 void WebServer::init() {
-    _srv.begin(WEB_PORT);
+    _srv.begin();
     _startDns();
     Log.log(LOG_INFO, "WebServer on port %d", WEB_PORT);
 }
@@ -42,7 +42,7 @@ void WebServer::_tickDns() {
 
     // Build minimal DNS A response pointing to 192.168.1.1
     uint8_t resp[128];
-    memcpy(resp, buf, min(len, 12)); // copy header
+    memcpy(resp, buf, len < 12 ? len : 12); // copy header
     resp[2] = 0x81; resp[3] = 0x80; // QR=1 Opcode=0 AA=1 RCODE=0
     resp[4] = resp[5]; resp[5] = resp[5]; // QDCOUNT same
     resp[6] = 0; resp[7] = 1;            // ANCOUNT = 1
@@ -85,7 +85,7 @@ void WebServer::_handleClient(WiFiClient& c) {
 
     // Read headers
     while (_parseLine(c, line, sizeof(line)) && strlen(line) > 0) {
-        if (strncasecmp(line, "Content-Length:", 15) == 0)
+        if (_zbw_strncasecmp(line, "Content-Length:", 15) == 0)
             content_len = atoi(line + 15);
     }
 
@@ -127,14 +127,16 @@ bool WebServer::_parseLine(WiFiClient& c, char* buf, int maxlen) {
 }
 
 void WebServer::_serveIndex(WiFiClient& c) {
-    c.printf("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
-             "Content-Length: %d\r\nConnection: close\r\n\r\n",
-             (int)strlen(INDEX_HTML));
-    // Send in chunks to avoid buffer overflow
+    char hdr[128];
+    snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+        "Content-Length: %d\r\nConnection: close\r\n\r\n",
+        (int)strlen(INDEX_HTML));
+    c.print(hdr);
     const char* p = INDEX_HTML;
-    int remaining = strlen(INDEX_HTML);
+    int remaining = (int)strlen(INDEX_HTML);
     while (remaining > 0) {
-        int chunk = min(remaining, 512);
+        int chunk = remaining < 512 ? remaining : 512;
         c.write((const uint8_t*)p, chunk);
         p += chunk; remaining -= chunk;
     }
@@ -174,5 +176,7 @@ void WebServer::_tickSSE() {
 
 void WebServer::pushSSE(const char* json) {
     if (!_sse || !_sse.connected()) return;
-    _sse.printf("data: %s\n\n", json);
+    char sse[220];
+    snprintf(sse, sizeof(sse), "data: %s\n\n", json);
+    _sse.print(sse);
 }

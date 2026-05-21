@@ -76,7 +76,7 @@ int FrameBuilder::buildBeacon(uint8_t* buf, const uint8_t* bssid,
     fix->capability = 0x0421; // ESS + short preamble
     off += sizeof(BeaconFixed);
 
-    uint8_t ssidlen = ssid ? min((int)strlen(ssid), 32) : 0;
+    uint8_t ssidlen = ssid ? ((int)strlen(ssid) < 32 ? (int)strlen(ssid) : 32) : 0;
     off += _addIE(buf + off, 0, (const uint8_t*)ssid, ssidlen);
     off += _addIE(buf + off, 1, RATES, 8);
     off += _addIE(buf + off, 3, &channel, 1);

@@ -58,7 +58,7 @@ void Attacker::startAttack(AttackMode mode) {
     _lastTx = 0;
 
     if (mode == ATK_EVIL_TWIN) {
-        WiFi.softAP(_etSSID, "", _etChannel);
+        WiFi.apbegin(_etSSID, (char*)"", _etChannel);
         _etActive = true;
         Log.log(LOG_ATTACK, "Evil twin started: SSID=%s ch=%d", _etSSID, _etChannel);
     } else {
@@ -69,7 +69,7 @@ void Attacker::startAttack(AttackMode mode) {
 void Attacker::stopAttack() {
     _running = false;
     if (_etActive) {
-        WiFi.softAP(nullptr); // stop evil twin; main AP restores in main
+        // Restore main AP — caller (main.cpp) calls startAP() after this
         _etActive = false;
     }
     Log.log(LOG_ATTACK, "Attack stopped. D:%u B:%u A:%u",
