@@ -30,6 +30,9 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
+      - name: Install Realtek AmebaD platform
+        run: pio pkg install --platform "https://github.com/ambiot/ambd_arduino.git"
+
       - name: Build firmware
         run: pio run -e bw16
 
