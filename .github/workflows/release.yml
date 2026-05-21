@@ -20,13 +20,13 @@ jobs:
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Add Realtek AmebaD board package
+      - name: Add Realtek AmebaZ2 board package (RTL8720DN)
         run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls \
-            https://github.com/ambiot/ambd_arduino/raw/master/Arduino_package/package_realtek.com_amebad_index.json
+            https://github.com/ambiot/ambz2_arduino/raw/master/Arduino_package/package_realtek.com_ambz2_index.json
           arduino-cli core update-index
-          arduino-cli core install realtek:AmebaD
+          arduino-cli core install realtek:AmebaZ2
 
       - name: List available boards
         run: arduino-cli board listall | grep -i realtek
@@ -34,7 +34,7 @@ jobs:
       - name: Build firmware
         run: |
           arduino-cli compile \
-            --fqbn realtek:AmebaD:bw16 \
+            --fqbn realtek:AmebaZ2:bw16 \
             --build-path build \
             --warnings none \
             .
