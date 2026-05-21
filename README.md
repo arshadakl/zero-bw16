@@ -247,6 +247,18 @@ All endpoints accept and return JSON. Base URL: `http://192.168.1.1`
 
 ---
 
+## Author
+
+**Arshad AK**
+
+| | |
+|---|---|
+| Portfolio | [arshadakl.in](https://www.arshadakl.in) |
+| SSH Portfolio | `ssh arshadakl.in` *(open your terminal and try it)* |
+| GitHub | [@arshadakl](https://github.com/arshadakl) |
+
+---
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE)
