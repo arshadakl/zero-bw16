@@ -54,11 +54,10 @@ static inline int _zbw_strncasecmp(const char* a, const char* b, size_t n) {
 #define DEFAULT_DEAUTH_REASON  2
 
 // --- GPIO ---
-#define LED_PIN        PA27  // BW16 user LED (active low)
-// Set LED_PIN_GREEN to a real pin number if your board has a second green LED.
-// -1 = not present; attack state then uses a 2 Hz blink on the primary LED instead.
-#define LED_PIN_GREEN  -1
-#define BUTTON_PIN PA12   // optional hardware button
+// BW16 LED pins (all active-low): LED_B=AMB_D11/PA13, LED_G=AMB_D10/PA14, LED_R=AMB_D12/PA12
+#define LED_PIN        LED_B   // primary = blue LED (AMB_D11/PA13, active low)
+#define LED_PIN_GREEN  LED_G   // secondary = green LED (AMB_D10/PA14, active low)
+#define BUTTON_PIN     PA25    // AMB_D7 — no conflict with LED pins
 
 // --- Web server ---
 #define WEB_PORT   80

@@ -47,18 +47,20 @@ void LedController::tick() {
         break;
 
     case LED_IDLE:
-        // Red slow blink 1 Hz
+        // Blue slow blink 1 Hz
         if (now - _lastToggle >= 1000) {
             _lastToggle = now;
-            _write(!_on, false);
+            _on = !_on;
+            _write(_on, false);
         }
         break;
 
     case LED_SCAN:
-        // Red fast blink 8 Hz
+        // Both LEDs fast blink 8 Hz
         if (now - _lastToggle >= 125) {
             _lastToggle = now;
-            _write(!_on, false);
+            _on = !_on;
+            _write(_on, hasGreen ? _on : false);
         }
         break;
 

