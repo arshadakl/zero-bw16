@@ -13,10 +13,14 @@
 
 static void startAP() {
     Settings& cfg = Nvs.cfg();
+    // Concurrent STA+AP mode: AP on wlan1, wlan0 idle for frame injection.
+    // wext_send_mgnt only works on STA-mode interface (wlan0); RTW_MODE_AP alone
+    // rejects RTKIOCSIWMGNTSEND on wlan0.
+    WiFi.enableConcurrent();
     char chStr[4];
     snprintf(chStr, sizeof(chStr), "%d", (int)cfg.ap_channel);
     WiFi.apbegin(cfg.ap_ssid, cfg.ap_pass, chStr);
-    Log.log(LOG_INFO, "AP: SSID=%s CH=%d IP=%s",
+    Log.log(LOG_INFO, "AP(STA+AP): SSID=%s CH=%d IP=%s",
             cfg.ap_ssid, cfg.ap_channel, AP_IP);
 }
 
