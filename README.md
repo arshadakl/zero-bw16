@@ -483,7 +483,7 @@ Contributions are welcome. This project is open-source under GPL-3.0.
 
 ## Author
 
-**Arshad AK**
+**Arshad AKL**
 
 | | |
 |---|---|
